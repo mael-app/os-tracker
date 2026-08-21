@@ -3,9 +3,19 @@ name: Update Distribution Repos
 on:
   release:
     types: [published]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag (e.g. v0.1.0)"
+        required: false
+        default: "v0.1.0"
 
 jobs:
   update-homebrew:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -13,15 +23,24 @@ jobs:
           repository: mael-app/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
-      - name: Download tarball & compute SHA-256
-        env:
-          TAG: ${{ github.event.release.tag_name }}
-          GH_REPO: ${{ github.repository }}
+      - name: Determine tag name
         run: |
-          URL="https://github.com/${GH_REPO}/releases/download/${TAG}/os-tracker-macos.tar.gz"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag_name }}"
+          elif [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          else
+            TAG=$(curl -fsSL https://api.github.com/repos/${{ github.repository }}/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+          fi
+          echo "RESOLVED_TAG=${TAG}" >> "$GITHUB_ENV"
+          echo "Target Release Tag: ${TAG}"
+
+      - name: Download tarball & compute SHA-256
+        run: |
+          URL="https://github.com/${{ github.repository }}/releases/download/${RESOLVED_TAG}/os-tracker-macos.tar.gz"
           curl -fsSL -o os-tracker-macos.tar.gz "${URL}"
           SHA=$(sha256sum os-tracker-macos.tar.gz | awk '{print $1}')
-          VERSION="${TAG#v}"
+          VERSION="${RESOLVED_TAG#v}"
           echo "URL=${URL}" >> "$GITHUB_ENV"
           echo "SHA=${SHA}" >> "$GITHUB_ENV"
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
@@ -29,6 +48,35 @@ jobs:
       - name: Update formula
         run: |
           F="Formula/os-tracker.rb"
+          mkdir -p Formula
+          if [ ! -f "$F" ]; then
+            cat << 'FORMULA_EOF' > "$F"
+class OsTracker < Formula
+  desc "Lightweight daemon to track active OS in real time"
+  homepage "https://github.com/mael-app/os-tracker"
+  url ""
+  sha256 ""
+  version ""
+  license "MIT"
+
+  def install
+    bin.install "os-tracker"
+  end
+
+  service do
+    run [opt_bin/"os-tracker"]
+    keep_alive true
+    log_path var/"log/os-tracker.log"
+    error_log_path var/"log/os-tracker.err.log"
+  end
+
+  test do
+    assert_match "os-tracker", shell_output("#{bin}/os-tracker --version")
+  end
+end
+FORMULA_EOF
+          fi
+
           sed -i "s|url \".*\"|url \"${URL}\"|" "$F"
           sed -i "s|sha256 \".*\"|sha256 \"${SHA}\"|" "$F"
           sed -i "s|version \".*\"|version \"${VERSION}\"|" "$F"
@@ -38,38 +86,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/os-tracker.rb
-          git diff --cached --quiet && exit 0
+          git diff --cached --quiet && echo "No changes detected" && exit 0
           git commit -m "os-tracker: update to ${VERSION}"
-          git push
-
-  update-apt:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          repository: mael-app/os-tracker-apt
-          ref: gh-pages
-          token: ${{ secrets.APT_REPO_TOKEN }}
-
-      - run: sudo apt-get update && sudo apt-get install -y reprepro gnupg
-
-      - name: Import GPG key
-        run: echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
-
-      - name: Download & add .deb
-        run: |
-          TAG="${{ github.event.release.tag_name }}"
-          VERSION="${TAG#v}"
-          curl -fsSL -o os-tracker.deb \
-            "https://github.com/${{ github.repository }}/releases/download/${TAG}/os-tracker_${VERSION}-1_amd64.deb"
-          reprepro -b . includedeb stable os-tracker.deb
-          gpg --armor --export ${{ secrets.GPG_KEY_FINGERPRINT }} > os-tracker.asc
-          touch .nojekyll
-
-      - name: Push
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "Update os-tracker to ${{ github.event.release.tag_name }}"
           git push
