@@ -35,7 +35,7 @@ jobs:
           echo "RESOLVED_TAG=${TAG}" >> "$GITHUB_ENV"
           echo "Target Release Tag: ${TAG}"
 
-      - name: Download tarball & compute SHA-256
+      - name: Download tarball and compute SHA-256
         run: |
           URL="https://github.com/${{ github.repository }}/releases/download/${RESOLVED_TAG}/os-tracker-macos.tar.gz"
           curl -fsSL -o os-tracker-macos.tar.gz "${URL}"
@@ -47,41 +47,11 @@ jobs:
 
       - name: Update formula
         run: |
-          F="Formula/os-tracker.rb"
           mkdir -p Formula
-          if [ ! -f "$F" ]; then
-            cat << 'FORMULA_EOF' > "$F"
-class OsTracker < Formula
-  desc "Lightweight daemon to track active OS in real time"
-  homepage "https://github.com/mael-app/os-tracker"
-  url ""
-  sha256 ""
-  version ""
-  license "MIT"
+          F="Formula/os-tracker.rb"
+          printf 'class OsTracker < Formula\n  desc "Lightweight daemon to track active OS in real time"\n  homepage "https://github.com/mael-app/os-tracker"\n  url "%s"\n  sha256 "%s"\n  version "%s"\n  license "MIT"\n\n  def install\n    bin.install "os-tracker"\n  end\n\n  service do\n    run [opt_bin/"os-tracker"]\n    keep_alive true\n    log_path var/"log/os-tracker.log"\n    error_log_path var/"log/os-tracker.err.log"\n  end\n\n  test do\n    assert_match "os-tracker", shell_output("#{bin}/os-tracker --version")\n  end\nend\n' "${URL}" "${SHA}" "${VERSION}" > "$F"
 
-  def install
-    bin.install "os-tracker"
-  end
-
-  service do
-    run [opt_bin/"os-tracker"]
-    keep_alive true
-    log_path var/"log/os-tracker.log"
-    error_log_path var/"log/os-tracker.err.log"
-  end
-
-  test do
-    assert_match "os-tracker", shell_output("#{bin}/os-tracker --version")
-  end
-end
-FORMULA_EOF
-          fi
-
-          sed -i "s|url \".*\"|url \"${URL}\"|" "$F"
-          sed -i "s|sha256 \".*\"|sha256 \"${SHA}\"|" "$F"
-          sed -i "s|version \".*\"|version \"${VERSION}\"|" "$F"
-
-      - name: Commit & push
+      - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
