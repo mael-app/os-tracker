@@ -1,0 +1,9 @@
+name = "os-tracker"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "os-tracker-db"
+database_id = "d045cab7-3349-4ed2-806c-2a40e0c5147a"
+migrations_dir = "migrations"

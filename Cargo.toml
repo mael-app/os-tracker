@@ -1,0 +1,31 @@
+[package]
+name = "os-tracker"
+version = "0.1.0"
+edition = "2021"
+description = "Lightweight daemon to track active OS in real time"
+license = "MIT"
+
+[dependencies]
+directories = "6"
+env_logger = "0.11"
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+ureq = { version = "3", features = ["json"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+codegen-units = 1
+
+[package.metadata.deb]
+maintainer = "Mael"
+section = "utils"
+priority = "optional"
+assets = [
+    ["target/release/os-tracker", "usr/bin/", "755"],
+    ["config.example.toml", "usr/share/doc/os-tracker/config.example.toml", "644"],
+    ["dist/os-tracker.service", "usr/lib/systemd/user/os-tracker.service", "644"],
+    ["dist/99-os-tracker.preset", "usr/lib/systemd/user-preset/99-os-tracker.preset", "644"],
+]

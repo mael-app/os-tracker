@@ -1,0 +1,75 @@
+name: Update Distribution Repos
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-homebrew:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: mael-app/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Download tarball & compute SHA-256
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          URL="https://github.com/${GH_REPO}/releases/download/${TAG}/os-tracker-macos.tar.gz"
+          curl -fsSL -o os-tracker-macos.tar.gz "${URL}"
+          SHA=$(sha256sum os-tracker-macos.tar.gz | awk '{print $1}')
+          VERSION="${TAG#v}"
+          echo "URL=${URL}" >> "$GITHUB_ENV"
+          echo "SHA=${SHA}" >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Update formula
+        run: |
+          F="Formula/os-tracker.rb"
+          sed -i "s|url \".*\"|url \"${URL}\"|" "$F"
+          sed -i "s|sha256 \".*\"|sha256 \"${SHA}\"|" "$F"
+          sed -i "s|version \".*\"|version \"${VERSION}\"|" "$F"
+
+      - name: Commit & push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/os-tracker.rb
+          git diff --cached --quiet && exit 0
+          git commit -m "os-tracker: update to ${VERSION}"
+          git push
+
+  update-apt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: mael-app/os-tracker-apt
+          ref: gh-pages
+          token: ${{ secrets.APT_REPO_TOKEN }}
+
+      - run: sudo apt-get update && sudo apt-get install -y reprepro gnupg
+
+      - name: Import GPG key
+        run: echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+
+      - name: Download & add .deb
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          curl -fsSL -o os-tracker.deb \
+            "https://github.com/${{ github.repository }}/releases/download/${TAG}/os-tracker_${VERSION}-1_amd64.deb"
+          reprepro -b . includedeb stable os-tracker.deb
+          gpg --armor --export ${{ secrets.GPG_KEY_FINGERPRINT }} > os-tracker.asc
+          touch .nojekyll
+
+      - name: Push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Update os-tracker to ${{ github.event.release.tag_name }}"
+          git push
