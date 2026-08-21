@@ -1,6 +1,6 @@
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
-use std::{env, fs, process, thread, time::Duration};
+use std::{env, fs, path::PathBuf, process, thread, time::Duration};
 
 #[derive(Deserialize)]
 struct Config {
@@ -17,6 +17,28 @@ fn default_interval() -> u64 {
 #[derive(Serialize)]
 struct Heartbeat<'a> {
     os: &'a str,
+}
+
+fn resolve_config_path() -> PathBuf {
+    if let Ok(home) = env::var("HOME") {
+        let xdg_config = PathBuf::from(&home).join(".config/os-tracker/config.toml");
+        if xdg_config.exists() {
+            return xdg_config;
+        }
+    }
+
+    if let Some(project_dirs) = ProjectDirs::from("", "", "os-tracker") {
+        let platform_config = project_dirs.config_dir().join("config.toml");
+        if platform_config.exists() {
+            return platform_config;
+        }
+    }
+
+    if let Ok(home) = env::var("HOME") {
+        PathBuf::from(home).join(".config/os-tracker/config.toml")
+    } else {
+        PathBuf::from("config.toml")
+    }
 }
 
 fn load_config() -> Config {
@@ -36,13 +58,11 @@ fn load_config() -> Config {
         };
     }
 
-    let project_dirs = ProjectDirs::from("", "", "os-tracker")
-        .expect("Failed to determine user configuration directory");
-    let config_path = project_dirs.config_dir().join("config.toml");
+    let config_path = resolve_config_path();
 
     let content = fs::read_to_string(&config_path).unwrap_or_else(|err| {
         eprintln!("Failed to read config file {}: {}", config_path.display(), err);
-        eprintln!("Create the config file or set OS_TRACKER_API_URL and OS_TRACKER_TOKEN environment variables.");
+        eprintln!("Create ~/.config/os-tracker/config.toml or set OS_TRACKER_API_URL and OS_TRACKER_TOKEN environment variables.");
         process::exit(1);
     });
 
@@ -67,7 +87,9 @@ fn send_heartbeat(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .target(env_logger::Target::Stdout)
+        .init();
 
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 && (args[1] == "--version" || args[1] == "-v") {
