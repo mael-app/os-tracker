@@ -20,7 +20,7 @@ struct Heartbeat<'a> {
 }
 
 fn resolve_config_path() -> PathBuf {
-    if let Ok(home) = env::var("HOME") {
+    if let Ok(home) = env::var("HOME").or_else(|_| env::var("USERPROFILE")) {
         let xdg_config = PathBuf::from(&home).join(".config/os-tracker/config.toml");
         if xdg_config.exists() {
             return xdg_config;
@@ -34,7 +34,9 @@ fn resolve_config_path() -> PathBuf {
         }
     }
 
-    if let Ok(home) = env::var("HOME") {
+    if let Some(project_dirs) = ProjectDirs::from("", "", "os-tracker") {
+        project_dirs.config_dir().join("config.toml")
+    } else if let Ok(home) = env::var("HOME").or_else(|_| env::var("USERPROFILE")) {
         PathBuf::from(home).join(".config/os-tracker/config.toml")
     } else {
         PathBuf::from("config.toml")
@@ -62,7 +64,10 @@ fn load_config() -> Config {
 
     let content = fs::read_to_string(&config_path).unwrap_or_else(|err| {
         eprintln!("Failed to read config file {}: {}", config_path.display(), err);
-        eprintln!("Create ~/.config/os-tracker/config.toml or set OS_TRACKER_API_URL and OS_TRACKER_TOKEN environment variables.");
+        eprintln!(
+            "Create {} or set OS_TRACKER_API_URL and OS_TRACKER_TOKEN environment variables.",
+            config_path.display()
+        );
         process::exit(1);
     });
 

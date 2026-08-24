@@ -38,7 +38,7 @@ export default {
         return Response.json({ error: "Invalid JSON payload" }, { status: 400, headers: CORS_HEADERS });
       }
 
-      if (body.os !== "macos" && body.os !== "linux") {
+      if (body.os !== "macos" && body.os !== "linux" && body.os !== "windows") {
         return Response.json({ error: "Invalid or unsupported OS value" }, { status: 400, headers: CORS_HEADERS });
       }
 

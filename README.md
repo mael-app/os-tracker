@@ -1,6 +1,6 @@
 # os-tracker
 
-Lightweight daemon and serverless edge API to track and expose active OS presence (*macOS* and/or *Linux*) in real time on personal portfolios.
+Lightweight daemon and serverless edge API to track and expose active OS presence (*macOS*, *Linux*, and/or *Windows*) in real time on personal portfolios.
 
 ---
 
@@ -8,7 +8,9 @@ Lightweight daemon and serverless edge API to track and expose active OS presenc
 
 ### 1. Configuration (All Platforms)
 
-Create your local configuration file at `~/.config/os-tracker/config.toml`:
+Create your local configuration file at:
+- **macOS / Linux:** `~/.config/os-tracker/config.toml`
+- **Windows:** `%APPDATA%\os-tracker\config.toml` (or `~/.config/os-tracker/config.toml`)
 
 ```toml
 api_url = "https://os-tracker.mael-app.workers.dev"
@@ -80,6 +82,44 @@ curl -fsSL https://raw.githubusercontent.com/mael-app/os-tracker/main/dist/insta
 
 ---
 
+### Windows Installation
+
+#### Option A: Standalone PowerShell Script (Automated Setup & Background Task)
+
+Run the following command in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/mael-app/os-tracker/main/dist/install.ps1 | iex
+```
+
+This script will:
+1. Download the latest Windows release (`x86_64-pc-windows-msvc`).
+2. Install `os-tracker.exe` to `%LOCALAPPDATA%\os-tracker` and add it to your user `PATH`.
+3. Create a configuration template at `%APPDATA%\os-tracker\config.toml`.
+4. Register and start a Windows Scheduled Task (`os-tracker`) running at user logon.
+
+#### Option B: Manual Installation
+
+1. Download `os-tracker-x86_64-pc-windows-msvc.zip` from [Releases](https://github.com/mael-app/os-tracker/releases/latest).
+2. Extract `os-tracker.exe` to a directory in your `PATH` (e.g. `%LOCALAPPDATA%\os-tracker`).
+3. Create your config file at `%APPDATA%\os-tracker\config.toml`.
+4. Register the background scheduled task to run at logon:
+   ```powershell
+   $Action = New-ScheduledTaskAction -Execute "$env:LOCALAPPDATA\os-tracker\os-tracker.exe"
+   $Trigger = New-ScheduledTaskTrigger -AtLogon
+   $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Days 0)
+   Register-ScheduledTask -TaskName "os-tracker" -Action $Action -Trigger $Trigger -Settings $Settings -Description "OS Tracker Daemon"
+   Start-ScheduledTask -TaskName "os-tracker"
+   ```
+
+#### Manage Service on Windows:
+- **Service status:** `Get-ScheduledTask -TaskName os-tracker`
+- **Start service:** `Start-ScheduledTask -TaskName os-tracker`
+- **Stop service:** `Stop-ScheduledTask -TaskName os-tracker`
+- **Restart service:** `Stop-ScheduledTask -TaskName os-tracker; Start-ScheduledTask -TaskName os-tracker`
+
+---
+
 ## ⚡ Serverless Backend (Cloudflare Worker + D1)
 
 ### Initial Cloudflare Deployment
@@ -92,7 +132,7 @@ Deploy the D1 database and Edge Worker in one automated step:
 
 ### API Endpoints
 
-- `POST /heartbeat`: Authenticated endpoint (`Authorization: Bearer <AUTH_TOKEN>`) receiving `{ "os": "macos" | "linux" }`.
+- `POST /heartbeat`: Authenticated endpoint (`Authorization: Bearer <AUTH_TOKEN>`) receiving `{ "os": "macos" | "linux" | "windows" }`.
 - `GET /status`: Public CORS-enabled endpoint returning active machines.
 
 #### Response Example:
@@ -101,7 +141,8 @@ Deploy the D1 database and Edge Worker in one automated step:
   "online": true,
   "machines": [
     { "os": "macos", "online": true, "last_seen": 1787234567000 },
-    { "os": "linux", "online": true, "last_seen": 1787234500000 }
+    { "os": "linux", "online": false, "last_seen": 1787234500000 },
+    { "os": "windows", "online": true, "last_seen": 1787234600000 }
   ]
 }
 ```
@@ -122,9 +163,10 @@ async function updateOsStatus() {
       return;
     }
 
+    const osNames = { macos: "macOS", linux: "Linux", windows: "Windows" };
     const onlineMachines = data.machines
       .filter((m) => m.online)
-      .map((m) => (m.os === "macos" ? "macOS" : "Linux"));
+      .map((m) => osNames[m.os] || m.os);
 
     badge.textContent = `🟢 Online on ${onlineMachines.join(" & ")}`;
   } catch {

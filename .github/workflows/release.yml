@@ -18,6 +18,8 @@ jobs:
             os: macos-latest
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -31,12 +33,20 @@ jobs:
 
       - run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Create archive
+      - name: Create archive (Unix)
+        if: runner.os != 'Windows'
         run: |
           tar czf "os-tracker-${{ matrix.target }}.tar.gz" \
             -C "target/${{ matrix.target }}/release" os-tracker
           shasum -a 256 "os-tracker-${{ matrix.target }}.tar.gz" \
             > "os-tracker-${{ matrix.target }}.tar.gz.sha256"
+
+      - name: Create archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "target/${{ matrix.target }}/release/os-tracker.exe" -DestinationPath "os-tracker-${{ matrix.target }}.zip"
+          (Get-FileHash -Algorithm SHA256 "os-tracker-${{ matrix.target }}.zip").Hash.ToLower() + "  os-tracker-${{ matrix.target }}.zip" | Out-File -Encoding ascii "os-tracker-${{ matrix.target }}.zip.sha256"
 
       - uses: actions/upload-artifact@v4
         with:
