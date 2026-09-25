@@ -12,6 +12,10 @@ const CORS_HEADERS = {
 
 const ONLINE_THRESHOLD_SECS = 300;
 
+// NixOS reports itself instead of "linux" so the badge can name it and show
+// its own logo. Any other distribution still reports "linux".
+const SUPPORTED_OS = new Set(["macos", "linux", "nixos", "windows"]);
+
 interface MachineRow {
   os: string;
   last_seen: number;
@@ -38,7 +42,7 @@ export default {
         return Response.json({ error: "Invalid JSON payload" }, { status: 400, headers: CORS_HEADERS });
       }
 
-      if (body.os !== "macos" && body.os !== "linux" && body.os !== "windows") {
+      if (!body.os || !SUPPORTED_OS.has(body.os)) {
         return Response.json({ error: "Invalid or unsupported OS value" }, { status: 400, headers: CORS_HEADERS });
       }
 

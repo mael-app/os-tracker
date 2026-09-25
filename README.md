@@ -181,7 +181,7 @@ Deploy the D1 database and Edge Worker in one automated step:
 
 ### API Endpoints
 
-- `POST /heartbeat`: Authenticated endpoint (`Authorization: Bearer <AUTH_TOKEN>`) receiving `{ "os": "macos" | "linux" | "windows" }`.
+- `POST /heartbeat`: Authenticated endpoint (`Authorization: Bearer <AUTH_TOKEN>`) receiving `{ "os": "macos" | "linux" | "nixos" | "windows" }`. The daemon reports `nixos` when `/etc/os-release` says so, and `linux` on every other distribution.
 - `GET /status`: Public CORS-enabled endpoint returning active machines.
 
 #### Response Example:
@@ -190,6 +190,7 @@ Deploy the D1 database and Edge Worker in one automated step:
   "online": true,
   "machines": [
     { "os": "macos", "online": true, "last_seen": 1787234567000 },
+    { "os": "nixos", "online": true, "last_seen": 1787234590000 },
     { "os": "linux", "online": false, "last_seen": 1787234500000 },
     { "os": "windows", "online": true, "last_seen": 1787234600000 }
   ]
@@ -212,7 +213,7 @@ async function updateOsStatus() {
       return;
     }
 
-    const osNames = { macos: "macOS", linux: "Linux", windows: "Windows" };
+    const osNames = { macos: "macOS", linux: "Linux", nixos: "NixOS", windows: "Windows" };
     const onlineMachines = data.machines
       .filter((m) => m.online)
       .map((m) => osNames[m.os] || m.os);

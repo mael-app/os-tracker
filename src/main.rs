@@ -77,8 +77,29 @@ fn load_config() -> Config {
     })
 }
 
+/// The `ID` field of /etc/os-release, lowercased. None anywhere it is absent,
+/// which covers macOS, Windows and Linux systems without the file.
+fn distro_id() -> Option<String> {
+    let content = fs::read_to_string("/etc/os-release").ok()?;
+    content.lines().find_map(|line| {
+        let value = line.strip_prefix("ID=")?;
+        Some(value.trim().trim_matches('"').to_ascii_lowercase())
+    })
+}
+
+/// What the heartbeat reports. NixOS is singled out from the other Linux
+/// distributions so the badge can show its own name and logo; everything else
+/// keeps the plain platform name.
+fn detect_os() -> &'static str {
+    if env::consts::OS == "linux" && distro_id().as_deref() == Some("nixos") {
+        return "nixos";
+    }
+
+    env::consts::OS
+}
+
 fn send_heartbeat(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
-    let os = env::consts::OS;
+    let os = detect_os();
     let payload = Heartbeat { os };
 
     let url = format!("{}/heartbeat", config.api_url.trim_end_matches('/'));
@@ -106,7 +127,7 @@ fn main() {
 
     log::info!(
         "os-tracker started (os={}, interval={}s)",
-        env::consts::OS,
+        detect_os(),
         config.interval_secs
     );
 
