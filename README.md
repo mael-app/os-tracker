@@ -74,6 +74,55 @@ systemctl --user enable --now os-tracker
 curl -fsSL https://raw.githubusercontent.com/mael-app/os-tracker/main/dist/install.sh | sh
 ```
 
+#### Option C: NixOS / Home Manager (Nix flake)
+
+This repository is a flake exposing the package, an overlay and a Home Manager
+module. Add it as an input:
+
+```nix
+{
+  inputs.os-tracker = {
+    url = "github:mael-app/os-tracker";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
+}
+```
+
+Then, in a Home Manager module:
+
+```nix
+{ config, inputs, ... }:
+
+{
+  imports = [ inputs.os-tracker.homeModules.default ];
+
+  services.os-tracker = {
+    enable = true;
+    apiUrl = "https://os-tracker.mael-app.workers.dev";
+    interval = 120;
+    tokenFile = "${config.home.homeDirectory}/.config/os-tracker/token.env";
+  };
+}
+```
+
+`tokenFile` points at a systemd environment file holding the bearer token, so
+it stays out of the Nix store and out of the configuration repository:
+
+```bash
+mkdir -p ~/.config/os-tracker
+printf 'OS_TRACKER_TOKEN=%s\n' "<YOUR_AUTH_TOKEN>" > ~/.config/os-tracker/token.env
+chmod 600 ~/.config/os-tracker/token.env
+```
+
+No `config.toml` is needed: the module passes the URL and the interval to the
+daemon through the unit environment. Upgrade with
+`nix flake update os-tracker` followed by a rebuild.
+
+Other outputs: `packages.<system>.os-tracker`, `overlays.default` (adds
+`pkgs.os-tracker`) and a `devShells.default` with the Rust toolchain.
+
+---
+
 #### Manage Service on Linux:
 - **Service status:** `systemctl --user status os-tracker`
 - **Live logs:** `journalctl --user -u os-tracker -f`
